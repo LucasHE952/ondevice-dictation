@@ -54,7 +54,11 @@ def phase1_smoke_test(settings: Settings, duration_seconds: float = 5.0) -> None
     from audio.capture import AudioCapture
     from transcription.model import VoxtralModel
 
-    model = VoxtralModel(language=settings["language"])
+    local_model_path = Path(__file__).parent.parent / "models" / "voxtral-realtime"
+    model = VoxtralModel(
+        model_path=local_model_path,
+        language=settings["language"],
+    )
 
     print(f"\n{APP_NAME} v{APP_VERSION} — Phase 1 smoke test")
     print("=" * 50)
