@@ -35,7 +35,7 @@ structure matter as much as functionality.
 
 - Apple Silicon Mac (M1, M2, M3, or M4) — Intel Macs are NOT supported
 - Minimum 8GB unified memory (16GB recommended)
-- Approximately 4GB free disk space for model weights
+- Approximately 3GB free disk space for model weights (Voxtral 4-bit is 2.9GB)
 - macOS 13 (Ventura) or later
 
 ---
@@ -76,15 +76,21 @@ activate recording. Releasing the hotkey ends the session and commits any buffer
 
 ## The Voxtral Model
 
-**Model:** Voxtral Realtime (mistralai/Voxtral-Realtime on Hugging Face)
-- 4B parameter model
+**Model:** `mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit`
+- 4B parameter model, 4-bit quantised for Apple Silicon (~2.9GB on disk)
 - Apache 2.0 license
-- Designed for streaming, real-time transcription
-- Edge-deployable, optimised for Apple Silicon via MLX
+- Purpose-built for transcription (not general audio understanding)
+- Inference via `mlx-audio` (`mlx_audio.stt.load`) — MLX-native, no PyTorch
 - Supports 13 languages
 
-**Model weights are NOT bundled with the app.** They are downloaded from Hugging Face
-on first run via a setup script. After download, the app runs fully offline forever.
+**Model weights are NOT bundled with the app.** Downloaded once via `curl` directly
+from HuggingFace and stored at `models/voxtral-realtime/` (gitignored). After
+download, the app runs fully offline forever.
+
+**Download method:** Use `curl -L -C -` with an HF auth token. Do NOT use
+`huggingface_hub.snapshot_download` — the xet transfer protocol it uses for large
+safetensors files stalls unpredictably on some networks. Plain HTTPS via curl is
+reliable and supports resuming with `-C -`.
 
 ---
 
@@ -93,25 +99,29 @@ on first run via a setup script. After download, the app runs fully offline fore
 Claude Code should select the best available libraries for each component. Decisions must be
 justified in code comments and in ARCHITECTURE.md. The following constraints apply:
 
-**Language:** Python (primary application logic and inference)
+**Language:** Python 3.12 (required — 3.11 and below are not supported)
 
-**Inference backend:** Must use MLX or an MLX-compatible library for Apple Silicon
-optimisation. Do not use PyTorch as the primary inference backend — MLX is the correct
-choice for on-device Apple Silicon inference.
+**Inference backend:** `mlx-audio` (`pip install mlx-audio[stt]`) — provides
+`mlx_audio.stt.load()` which auto-detects the model type and returns a model with
+`.generate(audio, stream=False)` returning an `STTOutput` with `.text`. MLX-native,
+runs on the Neural Engine / GPU. Do not use PyTorch as the inference backend.
 
-**Audio capture:** Choose the most reliable, low-latency option available for macOS.
-Justify the choice.
+**Audio capture:** `sounddevice` (PortAudio bindings) — clean numpy integration,
+actively maintained, non-blocking callback stream. Chunks are 100ms / 1600 samples.
 
-**Voice Activity Detection:** Choose a well-maintained VAD library. Justify the choice.
+**Voice Activity Detection:** `silero-vad` — neural VAD (LSTM), more accurate than
+webrtcvad across accents and noise. Requires exactly 512 samples per call at 16kHz.
+Split larger chunks into 512-sample windows internally before calling the model.
+Uses PyTorch for VAD inference only (not for the main transcription backend).
 
-**Text injection:** Must work system-wide across all macOS apps (not just specific ones).
-Must use macOS accessibility APIs or simulated keystrokes. Justify the approach.
+**Text injection:** Quartz CGEvent via `pyobjc-framework-Quartz` — works system-wide
+at the window server layer. `AXIsProcessTrusted()` for permission check lives in
+`pyobjc-framework-ApplicationServices`, NOT in Quartz.
 
-**Global hotkey:** Must work system-wide even when the app is not the focused window.
-Justify the library choice.
+**Global hotkey:** `pynput` — uses CGEventTap internally, works system-wide without
+root access, supports key press/release callbacks needed for push-to-talk.
 
-**UI (menu bar):** A lightweight menu bar / tray icon is required so the user can see the
-app is running and access settings. Choose the most appropriate Python macOS menu bar library.
+**UI (menu bar):** `rumps` — standard Python macOS menu bar library (Phase 3).
 
 Do NOT use Electron, React, or any web-based UI framework. This is a native macOS utility app.
 
@@ -122,18 +132,20 @@ Do NOT use Electron, React, or any web-based UI framework. This is a native macO
 Build in strict phase order. Do not proceed to the next phase until the current one is
 complete and manually tested.
 
-### Phase 1 — Proof of Concept (no UI, no injection)
-- Load the Voxtral model via MLX
+### Phase 1 — Proof of Concept (no UI, no injection) ✅ COMPLETE
+- Load the Voxtral model via mlx-audio
 - Capture microphone audio
 - Transcribe a short recording
 - Print the transcription to the terminal
+- Run with: `python src/main.py --phase1 --duration 5`
 - Goal: confirm the model loads and produces accurate output
 
-### Phase 2 — Core Dictation Loop
-- Add push-to-talk hotkey (system-wide)
-- Add VAD to filter silence within a held-key session
-- Stream transcription tokens as they arrive
-- Inject transcribed text into the currently focused application
+### Phase 2 — Core Dictation Loop ✅ COMPLETE
+- Push-to-talk hotkey (system-wide via pynput/CGEventTap)
+- VAD filters silence within a held-key session (Silero, 512-sample windows)
+- Audio buffered on hotkey hold, transcribed on release (batch, not streaming)
+- Transcribed text injected via CGEvent into the focused application
+- Run with: `python src/main.py`
 - Goal: basic dictation works end-to-end
 
 ### Phase 3 — Menu Bar App
@@ -258,6 +270,35 @@ These are guardrails. Do not deviate from them without flagging it explicitly.
 - **Do NOT skip phases** — build in order, test each phase before moving on
 - **Do NOT store transcription history** unless the user explicitly opts in (Phase 5+)
 - **Do NOT use `print()` for logging** — use the `logging` module
+
+---
+
+## Known Gotchas
+
+These are non-obvious issues discovered during development. Check here before debugging.
+
+- **Silero VAD chunk size:** The model requires exactly 512 samples at 16kHz (32ms).
+  Passing any other size raises a TorchScript ValueError. Always split chunks into
+  512-sample windows before calling `vad.is_speech()`.
+
+- **AXIsProcessTrusted import:** This function is in `ApplicationServices`, not `Quartz`.
+  `from Quartz import AXIsProcessTrusted` silently returns an ImportError.
+  Correct: `from ApplicationServices import AXIsProcessTrusted`.
+
+- **HuggingFace xet download stalls:** `snapshot_download` uses HF's xet protocol for
+  large safetensors files and stalls at ~384MB on many networks. Use `curl -L -C -` with
+  a bearer token instead. Resume interrupted downloads with `-C -`.
+
+- **mlx-audio is STT + TTS:** The package description says "text-to-speech" but it also
+  has a full `stt/` subpackage including `stt/models/voxtral_realtime/`. Import via
+  `from mlx_audio.stt import load`.
+
+- **Python version:** 3.12 is required. The system Python on macOS is 3.9 and is
+  incompatible. Install via `brew install python@3.12` and create the venv explicitly:
+  `/opt/homebrew/bin/python3.12 -m venv .venv`.
+
+- **Homebrew PATH:** After installing Homebrew, add to PATH before using it in new shells:
+  `eval "$(/opt/homebrew/bin/brew shellenv zsh)"` (add to `~/.zprofile` permanently).
 
 ---
 
