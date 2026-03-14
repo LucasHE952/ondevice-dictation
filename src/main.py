@@ -8,9 +8,12 @@ Full push-to-talk dictation (Phase 2+) will be added in subsequent phases.
 
 import argparse
 import logging
+import queue
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -113,6 +116,127 @@ def phase1_smoke_test(settings: Settings, duration_seconds: float = 5.0) -> None
     print("=" * 50)
 
 
+def run_dictation_loop(settings: Settings) -> None:
+    """Phase 2: Full push-to-talk dictation loop.
+
+    Hold the configured hotkey to record. On release, the audio is
+    transcribed and injected into the focused application.
+
+    Args:
+        settings: User settings instance.
+    """
+    logger = logging.getLogger(__name__)
+
+    from audio.capture import AudioCapture
+    from audio.vad import VoiceActivityDetector
+    from hotkey.listener import HotkeyListener
+    from injection.text_injector import TextInjector, check_accessibility_permission
+    from transcription.model import VoxtralModel
+    from transcription.streaming import AudioBuffer
+
+    # ── Accessibility permission check ────────────────────────────────────────
+    if not check_accessibility_permission():
+        print(
+            "\nERROR: Accessibility permission is required for text injection.\n"
+            "\nTo grant access:\n"
+            "  1. Open System Settings -> Privacy & Security -> Accessibility\n"
+            "  2. Enable 'Terminal' (or whichever app you launch this from)\n"
+            "  3. Re-run this app\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # ── Load models ───────────────────────────────────────────────────────────
+    local_model_path = Path(__file__).parent.parent / "models" / "voxtral-realtime"
+    model = VoxtralModel(model_path=local_model_path, language=settings["language"])
+    vad = VoiceActivityDetector(sensitivity=settings["vad_sensitivity"])
+    injector = TextInjector()
+
+    print(f"\n{APP_NAME} v{APP_VERSION} — dictation mode")
+    print("=" * 50)
+    print("Loading Voxtral Realtime...")
+    model.load()
+    print("Loading Silero VAD...")
+    vad.load()
+    print("Ready.\n")
+
+    # ── Shared state ──────────────────────────────────────────────────────────
+    buffer = AudioBuffer()
+    _recording = threading.Event()
+    _transcribe_queue: queue.Queue[Optional[np.ndarray]] = queue.Queue()
+
+    # ── Hotkey callbacks (run in pynput's listener thread) ────────────────────
+    def on_press() -> None:
+        buffer.clear()
+        vad.reset_state()
+        capture.drain()
+        _recording.set()
+        print("\n[Recording...]", end="", flush=True)
+
+    def on_release() -> None:
+        _recording.clear()
+        audio = buffer.flush()
+        print(" done", flush=True)
+        if audio is not None and len(audio) > 0:
+            _transcribe_queue.put(audio)
+
+    # ── Audio collection thread ───────────────────────────────────────────────
+    capture = AudioCapture(sample_rate=SAMPLE_RATE)
+
+    def _collect_audio() -> None:
+        for chunk in capture.stream():
+            if _recording.is_set():
+                if vad.is_speech(chunk):
+                    buffer.append_speech(chunk)
+                else:
+                    buffer.append_silence(chunk)
+
+    capture.start()
+    collect_thread = threading.Thread(target=_collect_audio, daemon=True, name="audio-collector")
+    collect_thread.start()
+
+    # ── Hotkey listener ───────────────────────────────────────────────────────
+    hotkey = HotkeyListener(
+        hotkey=settings["hotkey"],
+        on_press=on_press,
+        on_release=on_release,
+    )
+    hotkey.start()
+
+    print(f"Hold [{settings['hotkey']}] to dictate. Ctrl+C to quit.\n")
+
+    # ── Transcription loop (main thread) ──────────────────────────────────────
+    try:
+        while True:
+            try:
+                audio = _transcribe_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            if audio is None:
+                break
+
+            logger.info("Transcribing %.1fs of audio...", len(audio) / SAMPLE_RATE)
+            try:
+                text = model.transcribe(audio, language=settings["language"])
+                if text:
+                    logger.info("Transcription: %r", text)
+                    injector.type(text)
+                else:
+                    logger.debug("Empty transcription — no speech detected")
+            except PermissionError as exc:
+                logger.error("%s", exc)
+            except Exception as exc:
+                logger.error("Transcription failed: %s", exc, exc_info=True)
+
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    finally:
+        hotkey.stop()
+        capture.stop()
+        _transcribe_queue.put(None)
+
+
 def main() -> None:
     """Parse arguments and dispatch to the appropriate mode."""
     parser = argparse.ArgumentParser(
@@ -149,12 +273,7 @@ def main() -> None:
     if args.phase1:
         phase1_smoke_test(settings, duration_seconds=args.duration)
     else:
-        # Phase 2+ entry point placeholder
-        parser.print_help()
-        print(
-            "\nNote: Full push-to-talk mode (Phase 2) is not yet implemented.\n"
-            "Run with --phase1 to test the transcription pipeline."
-        )
+        run_dictation_loop(settings)
 
 
 if __name__ == "__main__":

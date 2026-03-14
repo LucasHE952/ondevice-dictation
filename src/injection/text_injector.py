@@ -32,10 +32,10 @@ def check_accessibility_permission() -> bool:
         True if Accessibility permission is granted, False otherwise.
     """
     try:
-        from Quartz import AXIsProcessTrusted
+        from ApplicationServices import AXIsProcessTrusted
         return bool(AXIsProcessTrusted())
     except ImportError:
-        logger.error("pyobjc-framework-Quartz not installed — cannot check accessibility")
+        logger.error("pyobjc-framework-ApplicationServices not installed — cannot check accessibility")
         return False
 
 

@@ -67,15 +67,21 @@ class VoiceActivityDetector:
         self._model.eval()
         logger.info("Silero VAD loaded (threshold=%.2f)", self.threshold)
 
+    # Silero VAD requires exactly this many samples per call at each sample rate.
+    _WINDOW_SAMPLES: dict[int, int] = {16000: 512, 8000: 256}
+
     def is_speech(self, chunk: np.ndarray) -> bool:
         """Return True if the audio chunk contains speech.
 
+        Internally splits the chunk into 512-sample (16kHz) windows required
+        by Silero VAD, returning True if any window exceeds the threshold.
+
         Args:
-            chunk: 1-D float32 numpy array. Length must correspond to
-                30ms, 60ms, or 100ms at the configured sample_rate.
+            chunk: 1-D float32 numpy array of any length >= window size.
 
         Returns:
-            True if speech probability exceeds the configured threshold.
+            True if speech probability exceeds the configured threshold in
+            any window of the chunk.
 
         Raises:
             RuntimeError: If ``load()`` has not been called.
@@ -85,11 +91,17 @@ class VoiceActivityDetector:
 
         import torch
 
-        tensor = torch.from_numpy(chunk).float()
-        with torch.no_grad():
-            prob: float = self._model(tensor, self.sample_rate).item()
+        window = self._WINDOW_SAMPLES[self.sample_rate]
 
-        return prob >= self.threshold
+        # Split into fixed-size windows; discard any trailing partial window.
+        for start in range(0, len(chunk) - window + 1, window):
+            tensor = torch.from_numpy(chunk[start : start + window]).float()
+            with torch.no_grad():
+                prob: float = self._model(tensor, self.sample_rate).item()
+            if prob >= self.threshold:
+                return True
+
+        return False
 
     def reset_state(self) -> None:
         """Reset Silero VAD's internal hidden state between sessions.
