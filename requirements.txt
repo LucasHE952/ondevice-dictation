@@ -1,0 +1,49 @@
+# On-Device Dictation App — Python Dependencies
+#
+# Inference backend: MLX (Apple Silicon optimised)
+# All inference runs locally. No network calls after model download.
+
+# ── Inference ──────────────────────────────────────────────────────────────
+# MLX: Apple Silicon GPU/Neural Engine inference framework by Apple
+mlx>=0.21.0
+# mlx-audio: MLX-native speech-to-text library — official community integration
+# for Voxtral Realtime. Provides the STT pipeline, streaming decoder, and
+# Apple Silicon-optimised audio encoder for Voxtral-Mini-4B-Realtime-2602.
+mlx-audio[stt]>=0.2.4
+
+# ── Audio capture ──────────────────────────────────────────────────────────
+# sounddevice: PortAudio bindings — low latency, reliable, actively maintained.
+# Chosen over PyAudio: cleaner API, numpy integration, no build complications.
+sounddevice>=0.5.0
+# numpy: array operations on raw audio buffers
+numpy>=1.26.0
+
+# ── Voice Activity Detection ────────────────────────────────────────────────
+# silero-vad: state-of-the-art VAD, 100ms latency, runs on CPU.
+# Chosen over webrtcvad: higher accuracy on diverse speakers & accents,
+# actively maintained, well-documented Python API.
+# Note: silero-vad pulls in torch as a lightweight inference-only dep.
+silero-vad>=5.1.0
+
+# ── Global hotkey ──────────────────────────────────────────────────────────
+# pynput: cross-platform input monitoring; macOS backend uses Quartz CGEvent.
+# Works system-wide without requiring the app to be frontmost.
+pynput>=1.7.7
+
+# ── Text injection ─────────────────────────────────────────────────────────
+# pyobjc-framework-Quartz: Quartz CGEvent for simulated keystrokes.
+# This is the only reliable system-wide approach on macOS — it works in every
+# app including terminals, browsers, and native Cocoa apps.
+pyobjc-framework-Quartz>=10.3.1
+pyobjc-framework-Cocoa>=10.3.1
+
+# ── Menu bar UI ────────────────────────────────────────────────────────────
+# rumps: minimal macOS menu bar / tray icon library built on AppKit.
+# Chosen over systray/pystray: macOS-native, actively maintained, simple API.
+rumps>=0.4.0
+
+# ── Utilities ──────────────────────────────────────────────────────────────
+# huggingface_hub: model download from HF Hub during setup (one-time, offline after)
+huggingface_hub>=0.23.0
+# python-dotenv: optional .env support for dev overrides
+python-dotenv>=1.0.0
