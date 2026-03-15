@@ -2,7 +2,7 @@
 
 > Accurate, private, local dictation for macOS — powered by Voxtral Realtime on Apple Silicon.
 
-Dictate into any app by holding a hotkey. All transcription runs entirely on your machine using [Mistral's Voxtral Realtime](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507) model — no audio or text ever leaves your device. More accurate than macOS built-in dictation, more private than cloud tools like Wispr Flow, and completely free.
+Dictate into any app by holding a hotkey. All transcription runs entirely on your machine using [Mistral's Voxtral Realtime](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) model — no audio or text ever leaves your device. More accurate than macOS built-in dictation, more private than cloud tools like Wispr Flow, and completely free.
 
 ---
 
