@@ -198,7 +198,7 @@ def run_dictation_app(settings: Settings) -> None:
     # main thread can read it without locks (GIL makes float writes atomic).
     _amplitude: list[float] = [0.0]
 
-    # ── Hotkey callbacks (run in pynput's listener thread) ────────────────────
+    # ── Hotkey callbacks (run on main thread via CGEventTap) ─────────────────
     def on_press() -> None:
         _cancel.clear()
         buffer.clear()
@@ -231,16 +231,6 @@ def run_dictation_app(settings: Settings) -> None:
             buffer.clear()
             ui_queue.put(UIEvent("idle"))
 
-    from pynput import keyboard as _kb
-
-    def _on_key(key):
-        if key == _kb.Key.esc:
-            on_escape()
-
-    _escape_listener = _kb.Listener(on_press=_on_key)
-    _escape_listener.daemon = True
-    _escape_listener.start()
-
     # ── Audio collection thread ───────────────────────────────────────────────
     capture = AudioCapture(sample_rate=SAMPLE_RATE)
 
@@ -270,6 +260,7 @@ def run_dictation_app(settings: Settings) -> None:
         hotkey=settings["hotkey"],
         on_press=on_press,
         on_release=on_release,
+        on_escape=on_escape,
     )
     hotkey.start()
 
@@ -314,21 +305,18 @@ def run_dictation_app(settings: Settings) -> None:
         """Called by the menu bar Quit action."""
         _stop_event.set()
         hotkey.stop()
-        _escape_listener.stop()
         capture.stop()
         _transcribe_queue.put(None)  # unblock transcription thread
 
     def _restart_hotkey(new_key: str) -> None:
-        """Called after the user captures a new hotkey in Settings."""
-        nonlocal hotkey
-        hotkey.stop()
-        hotkey = HotkeyListener(
-            hotkey=new_key,
-            on_press=on_press,
-            on_release=on_release,
-        )
-        hotkey.start()
-        logger.info("Hotkey listener restarted with key=%s", new_key)
+        """Called after the user selects a new hotkey in Settings.
+
+        Uses set_hotkey() to swap the key in-place rather than stopping
+        and recreating the listener. Recreating would start a new pynput
+        thread that calls TSMGetInputSourceProperty off the main queue,
+        which macOS 15+ kills with SIGTRAP.
+        """
+        hotkey.set_hotkey(new_key)
 
     # ── Menu bar app (takes over the main thread) ─────────────────────────────
     app = DictationMenuBarApp(

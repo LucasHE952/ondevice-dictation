@@ -11,13 +11,10 @@ for a fixed-size, non-resizable panel.
 
 Threading note:
   - show() must be called on the main thread (from menu bar timer or callback)
-  - Hotkey capture uses a temporary pynput Listener on a daemon thread;
-    the UI update is marshalled back to the main thread via a
-    _MainThreadDispatcher NSObject helper
+  - Hotkey selection uses an NSPopUpButton dropdown — no key capture needed
 """
 
 import logging
-import threading
 from collections.abc import Callable
 from typing import Optional
 
@@ -31,6 +28,7 @@ from AppKit import (
     NSMakeRect,
     NSObject,
     NSPanel,
+    NSPopUpButton,
     NSScrollView,
     NSSegmentedControl,
     NSTableColumn,
@@ -56,31 +54,6 @@ _WIN_W: float = 440.0
 _WIN_H: float = 420.0
 _BACKING_STORE_BUFFERED = 2
 
-
-# ── Main-thread dispatcher ────────────────────────────────────────────────────
-
-class _MainThreadDispatcher(NSObject):
-    """Utility that calls a Python callable on the main thread.
-
-    Used to marshal pynput's key-capture callback back to the main thread
-    for safe AppKit updates.
-    """
-
-    def call_(self, fn):
-        fn()
-
-
-_dispatcher = None  # initialised lazily on first use (must be on main thread)
-
-
-def _dispatch_main(fn: Callable) -> None:
-    """Schedule fn() to run on the main NSRunLoop thread."""
-    global _dispatcher
-    if _dispatcher is None:
-        _dispatcher = _MainThreadDispatcher.alloc().init()
-    _dispatcher.performSelectorOnMainThread_withObject_waitUntilDone_(
-        "call:", fn, False
-    )
 
 
 # ── Vocabulary table data source ──────────────────────────────────────────────
@@ -139,7 +112,6 @@ class SettingsWindow:
         self._settings = settings
         self._vad = vad
         self._on_hotkey_changed = on_hotkey_changed
-        self._capture_listener = None  # pynput listener active during key capture
 
         self._panel = self._build_panel()
         self._populate()
@@ -181,20 +153,24 @@ class SettingsWindow:
         cv.addSubview_(self._section_label("Hotkey", y=y))
 
         y -= 34
-        # Display current hotkey name
-        self._hotkey_field = self._make_field(
-            self._settings["hotkey"],
-            rect=NSMakeRect(20, y, 240, 24),
-            editable=False,
-        )
-        cv.addSubview_(self._hotkey_field)
+        # Dropdown listing all valid hotkeys
+        from hotkey.listener import HOTKEY_MAP
 
-        self._hotkey_btn = self._make_button(
-            "Click to change…",
-            rect=NSMakeRect(270, y, 150, 24),
-            action=self._start_hotkey_capture,
+        hotkey_names = list(HOTKEY_MAP.keys())
+        self._hotkey_popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(
+            NSMakeRect(20, y, 260, 24), False
         )
-        cv.addSubview_(self._hotkey_btn)
+        for name in hotkey_names:
+            self._hotkey_popup.addItemWithTitle_(name)
+
+        current = self._settings["hotkey"]
+        if current in hotkey_names:
+            self._hotkey_popup.selectItemWithTitle_(current)
+
+        # Wire action via target/action
+        self._hotkey_popup.setTarget_(self._make_hotkey_handler())
+        self._hotkey_popup.setAction_("hotkeyChanged:")
+        cv.addSubview_(self._hotkey_popup)
 
         # ── Section: VAD Sensitivity ─────────────────────────────────────────
         y -= 44
@@ -353,49 +329,28 @@ class SettingsWindow:
         self._vad_handler = handler  # keep alive
         return handler
 
-    # ── Hotkey capture ────────────────────────────────────────────────────────
+    # ── Hotkey picker ─────────────────────────────────────────────────────────
 
-    def _start_hotkey_capture(self) -> None:
-        self._hotkey_btn.setTitle_("Press a key…")
-        self._hotkey_btn.setEnabled_(False)
+    def _make_hotkey_handler(self):
+        """Return an NSObject target for the hotkey popup button."""
+        settings = self._settings
+        win_ref = self
 
-        from hotkey.listener import HOTKEY_MAP
-        from pynput import keyboard as pynput_kb
+        class _HotkeyHandler(NSObject):
+            def hotkeyChanged_(self, sender):
+                try:
+                    key_name = str(sender.titleOfSelectedItem())
+                    settings["hotkey"] = key_name
+                    settings.save()
+                    if win_ref._on_hotkey_changed:
+                        win_ref._on_hotkey_changed(key_name)
+                    logger.info("Hotkey changed to %s", key_name)
+                except Exception:
+                    logger.exception("Failed to change hotkey")
 
-        def on_press(key):
-            # Find matching key name in HOTKEY_MAP
-            key_name = None
-            for name, mapped in HOTKEY_MAP.items():
-                if key == mapped:
-                    key_name = name
-                    break
-
-            if key_name:
-                captured = key_name
-
-                def apply():
-                    self._apply_hotkey(captured)
-
-                _dispatch_main(apply)
-
-            return False  # Stop listener after first key
-
-        self._capture_listener = pynput_kb.Listener(on_press=on_press)
-        self._capture_listener.daemon = True
-        self._capture_listener.start()
-
-    def _apply_hotkey(self, key_name: str) -> None:
-        """Called on main thread after a key is captured."""
-        self._settings["hotkey"] = key_name
-        self._settings.save()
-        self._hotkey_field.setStringValue_(key_name)
-        self._hotkey_btn.setTitle_("Click to change…")
-        self._hotkey_btn.setEnabled_(True)
-
-        if self._on_hotkey_changed:
-            self._on_hotkey_changed(key_name)
-
-        logger.info("Hotkey changed to %s", key_name)
+        handler = _HotkeyHandler.alloc().init()
+        self._hotkey_handler = handler  # prevent GC
+        return handler
 
     # ── Vocabulary actions ────────────────────────────────────────────────────
 
@@ -455,4 +410,7 @@ class _ButtonTrampoline(NSObject):
     def fire_(self, sender):
         fn = _btn_registry.get(sender.tag())
         if fn:
-            fn()
+            try:
+                fn()
+            except Exception:
+                logger.exception("Button callback failed (tag=%s)", sender.tag())

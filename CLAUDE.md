@@ -84,8 +84,8 @@ activate recording. Releasing the hotkey ends the session and commits any buffer
 - Supports 13 languages
 
 **Model weights are NOT bundled with the app.** Downloaded once via `curl` directly
-from HuggingFace and stored at `models/voxtral-realtime/` (gitignored). After
-download, the app runs fully offline forever.
+from HuggingFace and stored at `~/.cache/ondevice-dictation/models/voxtral-realtime/`.
+After download, the app runs fully offline forever.
 
 **Download method:** Use `curl -L -C -` with an HF auth token. Do NOT use
 `huggingface_hub.snapshot_download` — the xet transfer protocol it uses for large
@@ -148,10 +148,13 @@ complete and manually tested.
 - Run with: `python src/main.py`
 - Goal: basic dictation works end-to-end
 
-### Phase 3 — Menu Bar App
-- Add a menu bar icon showing app status (idle / recording / processing)
-- Add a basic settings menu: change hotkey, select language
-- Add a "Check for model" option that shows whether weights are downloaded
+### Phase 3 — Menu Bar App ✅ COMPLETE
+- Menu bar icon showing app status (idle / recording / processing)
+- Settings window: change hotkey (with live capture), select language, VAD sensitivity
+- Floating overlay pill (80×26pt) with live waveform during recording, spinner during transcription
+- Escape-to-cancel: press Esc while recording or transcribing to discard
+- Live mic amplitude drives waveform animation
+- `.app` bundle via py2app: `bash build_app.sh --install`
 - Goal: the app feels like a real macOS utility
 
 ### Phase 4 — Setup & Onboarding
@@ -163,10 +166,9 @@ complete and manually tested.
 ### Phase 5 — Context Biasing & Polish
 - Add a settings screen for custom vocabulary (user-defined words/phrases the model should
   prioritise — names, technical terms, domain jargon)
-- Expose VAD sensitivity as a user setting
-- Add a floating overlay UI (small, non-intrusive window showing recording status and
-  tentative transcription text before it is committed to the target app)
 - Goal: power-user features that differentiate from built-in dictation
+
+Note: VAD sensitivity setting and floating overlay were completed in Phase 3.
 
 ---
 
@@ -178,6 +180,8 @@ ondevice-dictation/
 ├── README.md                  # User-facing documentation
 ├── ARCHITECTURE.md            # Technical deep-dive for contributors
 ├── LICENSE                    # Apache 2.0
+├── setup.py                   # py2app build configuration
+├── build_app.sh               # Build .app bundle (py2app + post-build fixes)
 ├── setup.sh                   # One-command setup script
 ├── requirements.txt           # Python dependencies
 │
@@ -195,12 +199,13 @@ ondevice-dictation/
 │   │   └── listener.py        # Global hotkey detection
 │   ├── ui/
 │   │   ├── menu_bar.py        # Menu bar icon and menu
-│   │   └── overlay.py         # Floating transcription overlay (Phase 5)
+│   │   ├── overlay.py         # Floating recording overlay (compact pill)
+│   │   └── settings_window.py # Settings window (hotkey, language, VAD)
 │   └── config/
 │       ├── settings.py        # User settings management
 │       └── defaults.py        # Default configuration values
 │
-├── models/                    # Downloaded model weights live here (gitignored)
+├── models/                    # Legacy; weights now at ~/.cache/ondevice-dictation/
 │   └── .gitkeep
 │
 └── tests/
@@ -299,6 +304,39 @@ These are non-obvious issues discovered during development. Check here before de
 
 - **Homebrew PATH:** After installing Homebrew, add to PATH before using it in new shells:
   `eval "$(/opt/homebrew/bin/brew shellenv zsh)"` (add to `~/.zprofile` permanently).
+
+- **py2app namespace packages (mlx, mlx_lm, mlx_audio):** These are PEP 420 namespace
+  packages — py2app's `imp_find_module` can't discover them, so listing them in
+  `packages` causes an `ImportError`. Instead, `build_app.sh` copies them manually
+  from site-packages into the bundle's `lib/python3.12/` directory post-build, then
+  removes their entries from `python312.zip` so the real directories take precedence.
+
+- **py2app native libraries in zip:** py2app compresses packages into `python312.zip`,
+  but `.so` and `.dylib` files can't be `dlopen`'d from inside a zip. Any package
+  with native extensions (e.g. `_sounddevice_data/portaudio-binaries/libportaudio.dylib`)
+  must be listed in setup.py `packages` to force it out as a real directory.
+
+- **torchaudio @rpath in bundle:** `libtorchaudio.so` links to `@rpath/libtorch.dylib`.
+  In a venv, torch sets up the rpath at import time, but in a frozen py2app bundle
+  that doesn't happen. `build_app.sh` adds `@loader_path` (for sibling libs) and
+  `@loader_path/../../torch/lib` (for torch libs) via `install_name_tool`.
+
+- **Python.framework symlink structure:** py2app copies `Python.framework` with real
+  files instead of the required symlink layout (`Versions/Current → 3.12`, etc.).
+  macOS `codesign` rejects this as "bundle format is ambiguous". `build_app.sh`
+  recreates proper symlinks post-build.
+
+- **Bundle code signing order:** Sign inside-out: individual `.so`/`.dylib` files first,
+  then `Frameworks/*.dylib`, then `Python.framework`, then the outer `.app` bundle.
+  Using `--deep` alone misses files inside nested lib/ directories.
+
+- **Accessibility permission per code signature:** macOS ties Accessibility permission
+  to the app's code signature. Each rebuild with a new ad-hoc signature invalidates
+  the grant — the user must remove and re-add the app in System Settings.
+
+- **Install must preserve symlinks:** Use `cp -RPp` (not `cp -r` or `ditto`) when
+  copying the `.app` bundle to `/Applications/`. `cp -r` dereferences symlinks,
+  breaking the Python.framework structure and invalidating the code signature.
 
 ---
 
