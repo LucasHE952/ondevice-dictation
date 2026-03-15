@@ -283,11 +283,14 @@ These are guardrails. Do not deviate from them without flagging it explicitly.
 
 These are non-obvious issues discovered during development. Check here before debugging.
 
-- **Voxtral Realtime is a corrective streaming model — do not use `stream=True` for
-  text injection.** The model emits a draft transcription first, then re-emits corrected
-  tokens as context improves (e.g. "The choice we saw" → "The issues we saw"). Injecting
-  token-by-token with `stream=True` causes both versions to be typed, duplicating text.
-  Always use `stream=False` (batch mode) so only the final corrected output is injected.
+- **Do not use `stream=True` for text injection — Voxtral Realtime produces two streams.**
+  The model internally runs a partial stream (draft tokens emitted early) and a final stream
+  (corrected tokens once full acoustic context is available), then merges them. Injecting
+  every delta naively with `stream=True` types both streams sequentially, duplicating the
+  transcribed text (e.g. "The choice we saw… The issues we saw…"). The mlx-audio library
+  does not expose which stream a delta belongs to, so there is no way to filter to the
+  final stream only without modifying the library. Always use `stream=False`, which returns
+  the fully merged, corrected output as a single string.
 
 - **VAD chunk size:** The MLX VAD model (ported from Silero VAD v5) requires exactly
   512 samples at 16kHz (32ms) per window. Always split chunks into 512-sample windows
