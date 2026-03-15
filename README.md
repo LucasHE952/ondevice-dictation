@@ -29,8 +29,8 @@ Dictate into any app by holding a hotkey. All transcription runs entirely on you
 ## Install
 
 ```bash
-git clone https://github.com/your-username/ondevice-dictation.git
-cd ondevice-dictation
+git clone https://github.com/your-username/voxvault.git
+cd voxvault
 bash setup.sh
 ```
 
@@ -103,7 +103,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for a detailed technical breakdown.
 
 ## Configuration
 
-Settings are stored at `~/.config/ondevice-dictation/settings.json`:
+Settings are stored at `~/.config/voxvault/settings.json`:
 
 ```json
 {
@@ -111,7 +111,7 @@ Settings are stored at `~/.config/ondevice-dictation/settings.json`:
   "language": "en",
   "vad_sensitivity": "medium",
   "custom_vocabulary": [],
-  "model_path": "~/.cache/ondevice-dictation/models/voxtral-realtime"
+  "model_path": "~/.cache/voxvault/models/voxtral-realtime"
 }
 ```
 

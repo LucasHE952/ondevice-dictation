@@ -1,4 +1,4 @@
-"""Entry point for ondevice-dictation.
+"""Entry point for VoxVault.
 
 Phase 1 goal: confirm the model loads and produces accurate output.
 Run with: python src/main.py --phase1

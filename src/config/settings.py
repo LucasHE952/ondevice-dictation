@@ -1,6 +1,6 @@
-"""User settings management for ondevice-dictation.
+"""User settings management for VoxVault.
 
-Settings are persisted as JSON in ~/.config/ondevice-dictation/settings.json.
+Settings are persisted as JSON in ~/.config/voxvault/settings.json.
 On first run the file is created with DEFAULT_SETTINGS. On subsequent runs
 the file is loaded and any missing keys are backfilled from defaults (forward
 compatibility for new settings added in future versions).

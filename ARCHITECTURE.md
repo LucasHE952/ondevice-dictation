@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — ondevice-dictation
+# ARCHITECTURE.md — VoxVault
 
 Technical reference for contributors. Read this before modifying core pipeline components.
 

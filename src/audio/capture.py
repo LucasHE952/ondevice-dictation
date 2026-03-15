@@ -1,4 +1,4 @@
-"""Microphone audio capture for ondevice-dictation.
+"""Microphone audio capture for VoxVault.
 
 Uses sounddevice (PortAudio bindings) for low-latency, reliable audio capture.
 

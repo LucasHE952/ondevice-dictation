@@ -1,4 +1,4 @@
-"""py2app build configuration for OnDevice Dictation.
+"""py2app build configuration for VoxVault.
 
 Build a release .app bundle:
     python setup.py py2app
@@ -7,8 +7,8 @@ Build a fast alias bundle for development/testing:
     python setup.py py2app --alias
 
 After building:
-    open 'dist/OnDevice Dictation.app'              # test it
-    cp -r 'dist/OnDevice Dictation.app' /Applications/  # install
+    open 'dist/VoxVault.app'              # test it
+    cp -r 'dist/VoxVault.app' /Applications/  # install
 """
 
 import sys
@@ -33,20 +33,20 @@ OPTIONS = {
     "no_zip": True,
     # ── Info.plist ────────────────────────────────────────────────────────────
     "plist": {
-        "CFBundleName": "OnDevice Dictation",
-        "CFBundleDisplayName": "OnDevice Dictation",
-        "CFBundleIdentifier": "com.ondevice-dictation.app",
+        "CFBundleName": "VoxVault",
+        "CFBundleDisplayName": "VoxVault",
+        "CFBundleIdentifier": "com.voxvault.app",
         "CFBundleVersion": "0.1.0",
         "CFBundleShortVersionString": "0.1.0",
         # LSUIElement = True → menu bar only; no dock icon, no app switcher entry
         "LSUIElement": True,
         # Privacy usage strings — macOS shows these in System Settings
         "NSMicrophoneUsageDescription": (
-            "OnDevice Dictation records your voice to transcribe speech into text. "
+            "VoxVault records your voice to transcribe speech into text. "
             "Audio is processed entirely on-device and never leaves your Mac."
         ),
         "NSInputMonitoringUsageDescription": (
-            "OnDevice Dictation monitors keyboard input to detect your push-to-talk "
+            "VoxVault monitors keyboard input to detect your push-to-talk "
             "hotkey and the Escape key to cancel recording."
         ),
         # Accessibility permission is granted manually in System Settings;
@@ -130,7 +130,7 @@ OPTIONS = {
 
 setup(
     app=APP,
-    name="OnDevice Dictation",
+    name="VoxVault",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

@@ -1,4 +1,4 @@
-"""Default configuration values for ondevice-dictation.
+"""Default configuration values for VoxVault.
 
 All user-facing defaults live here. Changing a default here propagates
 everywhere — no other file should hardcode these values.
@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 # ── App identity ────────────────────────────────────────────────────────────
-APP_NAME: str = "ondevice-dictation"
+APP_NAME: str = "VoxVault"
 APP_VERSION: str = "0.1.0"
 
 # ── Paths ───────────────────────────────────────────────────────────────────

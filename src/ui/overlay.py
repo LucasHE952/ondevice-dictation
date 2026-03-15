@@ -1,4 +1,4 @@
-"""Floating recording indicator overlay for ondevice-dictation.
+"""Floating recording indicator overlay for VoxVault.
 
 A translucent pill that appears during recording and transcription.
 

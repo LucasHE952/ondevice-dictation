@@ -1,4 +1,4 @@
-"""Native NSPanel settings window for ondevice-dictation (Phase 3).
+"""Native NSPanel settings window for VoxVault (Phase 3).
 
 Sections:
   - Hotkey: click to capture next key press
@@ -375,7 +375,7 @@ class SettingsWindow:
 
     @staticmethod
     def _open_github() -> None:
-        url = NSURL.URLWithString_("https://github.com/LucasHE952/ondevice-dictation")
+        url = NSURL.URLWithString_("https://github.com/LucasHE952/voxvault")
         NSWorkspace.sharedWorkspace().openURL_(url)
 
 

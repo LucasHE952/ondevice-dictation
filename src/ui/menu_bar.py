@@ -1,4 +1,4 @@
-"""Menu bar app for ondevice-dictation (Phase 3).
+"""Menu bar app for VoxVault (Phase 3).
 
 DictationMenuBarApp subclasses rumps.App to:
 - Show a menu bar icon that reflects idle / recording / transcribing state

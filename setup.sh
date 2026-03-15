@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — One-command setup for ondevice-dictation
+# setup.sh — One-command setup for voxvault
 #
 # What this script does:
 #   1. Checks hardware (Apple Silicon required)
@@ -27,7 +27,7 @@ info() { echo -e "${BLUE}→${NC}  $*"; }
 
 echo ""
 echo "╔═══════════════════════════════════════════════╗"
-echo "║       ondevice-dictation — Setup Script       ║"
+echo "║       voxvault — Setup Script       ║"
 echo "╚═══════════════════════════════════════════════╝"
 echo ""
 
@@ -114,7 +114,7 @@ info "Downloading Voxtral Realtime weights from Hugging Face (~4GB)…"
 info "This is a one-time download. The app runs fully offline after this."
 echo ""
 
-MODEL_DIR="$HOME/.cache/ondevice-dictation/models/voxtral-realtime"
+MODEL_DIR="$HOME/.cache/voxvault/models/voxtral-realtime"
 REPO_ID="mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit"
 
 python3 - <<EOF

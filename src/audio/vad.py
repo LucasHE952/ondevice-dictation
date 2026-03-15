@@ -1,4 +1,4 @@
-"""Voice Activity Detection (VAD) for ondevice-dictation.
+"""Voice Activity Detection (VAD) for VoxVault.
 
 Reimplements the Silero VAD v5 LSTM architecture using MLX, eliminating the
 ~500MB PyTorch dependency. Weights are extracted once from the Silero PyTorch

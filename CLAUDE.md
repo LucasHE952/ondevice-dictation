@@ -1,4 +1,4 @@
-# CLAUDE.md — On-Device Dictation App
+# CLAUDE.md — VoxVault
 
 This document is the authoritative specification for this project. Read it in full before
 writing any code. Refer back to it whenever making architectural or implementation decisions.
@@ -84,7 +84,7 @@ activate recording. Releasing the hotkey ends the session and commits any buffer
 - Supports 13 languages
 
 **Model weights are NOT bundled with the app.** Downloaded once via `curl` directly
-from HuggingFace and stored at `~/.cache/ondevice-dictation/models/voxtral-realtime/`.
+from HuggingFace and stored at `~/.cache/voxvault/models/voxtral-realtime/`.
 After download, the app runs fully offline forever.
 
 **Download method:** Use `curl -L -C -` with an HF auth token. Do NOT use
@@ -176,7 +176,7 @@ Note: VAD sensitivity setting and floating overlay were completed in Phase 3.
 ## Repository Structure
 
 ```
-ondevice-dictation/
+voxvault/
 ├── CLAUDE.md                  # This file
 ├── README.md                  # User-facing documentation
 ├── ARCHITECTURE.md            # Technical deep-dive for contributors
@@ -206,7 +206,7 @@ ondevice-dictation/
 │       ├── settings.py        # User settings management
 │       └── defaults.py        # Default configuration values
 │
-├── models/                    # Legacy; weights now at ~/.cache/ondevice-dictation/
+├── models/                    # Legacy; weights now at ~/.cache/voxvault/
 │   └── .gitkeep
 │
 └── tests/
@@ -236,7 +236,7 @@ The app requires two macOS permissions. Both must be handled gracefully:
 
 ## Configuration
 
-User settings must be persisted between sessions. Store in `~/.config/ondevice-dictation/settings.json`.
+User settings must be persisted between sessions. Store in `~/.config/voxvault/settings.json`.
 
 Default settings:
 ```json
@@ -245,7 +245,7 @@ Default settings:
   "language": "en",
   "vad_sensitivity": "medium",
   "custom_vocabulary": [],
-  "model_path": "~/.cache/ondevice-dictation/models/voxtral-realtime"
+  "model_path": "~/.cache/voxvault/models/voxtral-realtime"
 }
 ```
 
@@ -374,6 +374,7 @@ This file is for developers and contributors. It must explain:
 
 ## Naming
 
-The repository and app are currently named **ondevice-dictation** as a placeholder. A proper
-name will be decided later. Do not hard-code a branding name anywhere — use the config value
-`app_name` (default: `"ondevice-dictation"`) wherever the app name appears in UI or logs.
+The app is named **VoxVault** — the name references voice input ("Vox") and local/private
+storage ("Vault"), and echoes the underlying Voxtral model. Do not hard-code the name as a
+string literal anywhere — use the config value `APP_NAME` (defined in `src/config/defaults.py`)
+wherever the app name appears in UI or logs.

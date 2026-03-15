@@ -1,4 +1,4 @@
-"""Token streaming and audio buffer management for ondevice-dictation.
+"""Token streaming and audio buffer management for VoxVault.
 
 This module handles the buffering strategy between audio capture and the
 transcription model: accumulate speech chunks while the hotkey is held,

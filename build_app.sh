@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# build_app.sh — Build the OnDevice Dictation .app bundle with py2app.
+# build_app.sh — Build the VoxVault .app bundle with py2app.
 #
 # Usage:
-#   bash build_app.sh           # full release build → dist/OnDevice Dictation.app
+#   bash build_app.sh           # full release build → dist/VoxVault.app
 #   bash build_app.sh --alias   # fast alias build for development/testing
 #   bash build_app.sh --install # build + copy to /Applications
 
@@ -44,7 +44,7 @@ if ! python -c "import py2app" 2>/dev/null; then
 fi
 
 # ── Check model weights are present ──────────────────────────────────────────
-MODEL_DIR="$HOME/.cache/ondevice-dictation/models/voxtral-realtime"
+MODEL_DIR="$HOME/.cache/voxvault/models/voxtral-realtime"
 if [[ ! -d "$MODEL_DIR" ]]; then
     echo ""
     echo "WARNING: Model weights not found at:"
@@ -69,7 +69,7 @@ else
     # structure (see Known Gotchas). We re-sign everything post-build anyway,
     # so tolerate a signing-only failure here.
     python setup.py py2app 2>&1 || {
-        if [[ -d "dist/OnDevice Dictation.app" ]]; then
+        if [[ -d "dist/VoxVault.app" ]]; then
             echo "WARNING: py2app signing failed (expected — will re-sign below)"
         else
             echo "ERROR: py2app build failed (no .app bundle created)"
@@ -79,24 +79,24 @@ else
 fi
 
 echo ""
-echo "✓ Build complete: dist/OnDevice Dictation.app"
+echo "✓ Build complete: dist/VoxVault.app"
 
 # ── Strip partial signatures so post-build modifications aren't blocked ──────
 # py2app's signing may partially sign the bundle. macOS blocks modifications to
 # signed bundles, so we strip all ad-hoc signatures before our post-build fixes.
 echo "Stripping partial signatures for post-build modifications…"
-codesign --remove-signature "dist/OnDevice Dictation.app" 2>/dev/null || true
-find "dist/OnDevice Dictation.app" \( -name '*.so' -o -name '*.dylib' \) -exec \
+codesign --remove-signature "dist/VoxVault.app" 2>/dev/null || true
+find "dist/VoxVault.app" \( -name '*.so' -o -name '*.dylib' \) -exec \
     codesign --remove-signature {} \; 2>/dev/null || true
 # Also remove extended attributes that might block cp
-xattr -cr "dist/OnDevice Dictation.app" 2>/dev/null || true
+xattr -cr "dist/VoxVault.app" 2>/dev/null || true
 
 # ── Copy namespace packages that py2app can't discover ───────────────────────
 # mlx and mlx_lm are namespace packages (PEP 420) — py2app's imp_find_module
 # can't locate them, so they end up as .pyc stubs in python312.zip without
 # the critical C extension (mlx/core.cpython-312-darwin.so). Copy them as
 # real directories into the bundle's lib/ tree.
-BUNDLE_LIB="dist/OnDevice Dictation.app/Contents/Resources/lib/python3.12"
+BUNDLE_LIB="dist/VoxVault.app/Contents/Resources/lib/python3.12"
 SITE_PKGS="$(python -c 'import site; print(site.getsitepackages()[0])')"
 
 for pkg in mlx mlx_lm mlx_audio; do
@@ -134,7 +134,7 @@ fi
 # macOS requires: Versions/Current → 3.12 (symlink), and top-level Python,
 # Resources → Versions/Current/* (symlinks). py2app copies them as real
 # files/dirs, which makes the bundle "ambiguous" to codesign.
-PYFW="dist/OnDevice Dictation.app/Contents/Frameworks/Python.framework"
+PYFW="dist/VoxVault.app/Contents/Frameworks/Python.framework"
 if [[ -d "$PYFW" ]]; then
     echo "Fixing Python.framework symlink structure…"
     rm -rf "$PYFW/Versions/Current"
@@ -151,12 +151,12 @@ echo "Re-signing native binaries inside the bundle…"
 NATIVE_COUNT=0
 while IFS= read -r f; do
     codesign --force --sign - "$f" 2>/dev/null && ((NATIVE_COUNT++)) || true
-done < <(find "dist/OnDevice Dictation.app" \( -name '*.so' -o -name '*.dylib' \) -not -path "*/Python.framework/*")
+done < <(find "dist/VoxVault.app" \( -name '*.so' -o -name '*.dylib' \) -not -path "*/Python.framework/*")
 echo "  Signed $NATIVE_COUNT native files"
 
 # Sign Frameworks/ dylibs
 echo "Re-signing Frameworks…"
-for f in "dist/OnDevice Dictation.app/Contents/Frameworks/"*.dylib; do
+for f in "dist/VoxVault.app/Contents/Frameworks/"*.dylib; do
     [[ -f "$f" ]] && codesign --force --sign - "$f"
 done
 
@@ -168,23 +168,23 @@ if [[ -d "$PYFW" ]]; then
 fi
 
 echo "Re-signing outer bundle…"
-codesign --force --sign - "dist/OnDevice Dictation.app" 2>&1
+codesign --force --sign - "dist/VoxVault.app" 2>&1
 echo "✓ Signed"
 
 # ── Install ───────────────────────────────────────────────────────────────────
 if $INSTALL; then
-    DEST="/Applications/OnDevice Dictation.app"
+    DEST="/Applications/VoxVault.app"
     echo "Installing to /Applications…"
     rm -rf "$DEST"
     # -R preserves symlinks; -P prevents dereferencing (required for framework signing)
-    cp -RPp "dist/OnDevice Dictation.app" "$DEST"
+    cp -RPp "dist/VoxVault.app" "$DEST"
     echo "✓ Installed: $DEST"
     echo ""
     echo "Launch from Spotlight or Finder, or run:"
-    echo "  open '/Applications/OnDevice Dictation.app'"
+    echo "  open '/Applications/VoxVault.app'"
 else
     echo ""
-    echo "To test:    open 'dist/OnDevice Dictation.app'"
+    echo "To test:    open 'dist/VoxVault.app'"
     echo "To install: bash build_app.sh --install"
-    echo "            (or: cp -r 'dist/OnDevice Dictation.app' /Applications/)"
+    echo "            (or: cp -r 'dist/VoxVault.app' /Applications/)"
 fi
