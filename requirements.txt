@@ -19,11 +19,9 @@ sounddevice>=0.5.0
 numpy>=1.26.0
 
 # ── Voice Activity Detection ────────────────────────────────────────────────
-# silero-vad: state-of-the-art VAD, 100ms latency, runs on CPU.
-# Chosen over webrtcvad: higher accuracy on diverse speakers & accents,
-# actively maintained, well-documented Python API.
-# Note: silero-vad pulls in torch as a lightweight inference-only dep.
-silero-vad>=5.1.0
+# VAD uses a port of the Silero VAD v5 LSTM to MLX (see src/audio/vad.py).
+# Weights are pre-extracted into src/audio/silero_vad_v5.npz (~1.2MB).
+# No additional dependencies — MLX (already required for Voxtral) handles inference.
 
 # ── Global hotkey ──────────────────────────────────────────────────────────
 # pynput: cross-platform input monitoring; macOS backend uses Quartz CGEvent.

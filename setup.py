@@ -16,7 +16,7 @@ from pathlib import Path
 from setuptools import setup
 
 # modulegraph (used by py2app) hits Python's default recursion limit when
-# scanning deeply nested packages like torch. Raise it before the scan runs.
+# scanning deeply nested packages. Raise it before the scan runs.
 sys.setrecursionlimit(5000)
 
 # Make src/ packages visible to py2app's module scanner
@@ -77,10 +77,7 @@ OPTIONS = {
         "sounddevice",
         "_sounddevice_data",
         "numpy",
-        # VAD (pulls in torch for CPU inference)
-        "silero_vad",
-        "torch",
-        "torchaudio",
+        # VAD weights are bundled as silero_vad_v5.npz — inference runs on MLX
         # MLX inference (Apple Silicon Neural Engine / GPU)
         # mlx is a namespace package — imp_find_module can't locate it, so we
         # can't list it here. It's copied manually in build_app.sh post-build.
@@ -101,6 +98,11 @@ OPTIONS = {
     # Exclude packages we don't use — reduces bundle size and avoids SIP copy
     # errors on signed C extensions we don't need.
     "excludes": [
+        # PyTorch — no longer needed; VAD runs on MLX
+        "torch",
+        "torchaudio",
+        "silero_vad",
+        # Unused large packages
         "scipy",
         "matplotlib",
         "sklearn",

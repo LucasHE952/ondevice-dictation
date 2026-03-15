@@ -65,11 +65,31 @@ if $ALIAS; then
     python setup.py py2app --alias 2>&1
 else
     echo "Building release bundle (this takes a few minutes)…"
-    python setup.py py2app 2>&1
+    # py2app's built-in ad-hoc signing may fail on the Python.framework symlink
+    # structure (see Known Gotchas). We re-sign everything post-build anyway,
+    # so tolerate a signing-only failure here.
+    python setup.py py2app 2>&1 || {
+        if [[ -d "dist/OnDevice Dictation.app" ]]; then
+            echo "WARNING: py2app signing failed (expected — will re-sign below)"
+        else
+            echo "ERROR: py2app build failed (no .app bundle created)"
+            exit 1
+        fi
+    }
 fi
 
 echo ""
 echo "✓ Build complete: dist/OnDevice Dictation.app"
+
+# ── Strip partial signatures so post-build modifications aren't blocked ──────
+# py2app's signing may partially sign the bundle. macOS blocks modifications to
+# signed bundles, so we strip all ad-hoc signatures before our post-build fixes.
+echo "Stripping partial signatures for post-build modifications…"
+codesign --remove-signature "dist/OnDevice Dictation.app" 2>/dev/null || true
+find "dist/OnDevice Dictation.app" \( -name '*.so' -o -name '*.dylib' \) -exec \
+    codesign --remove-signature {} \; 2>/dev/null || true
+# Also remove extended attributes that might block cp
+xattr -cr "dist/OnDevice Dictation.app" 2>/dev/null || true
 
 # ── Copy namespace packages that py2app can't discover ───────────────────────
 # mlx and mlx_lm are namespace packages (PEP 420) — py2app's imp_find_module
@@ -100,25 +120,6 @@ if [[ -f "$ZIPFILE" ]]; then
     echo "Removing shadowed packages from python312.zip…"
     # -d = delete entries matching the glob patterns
     zip -d "$ZIPFILE" "mlx/*" "mlx_lm/*" "mlx_audio/*" 2>/dev/null || true
-fi
-
-# ── Fix @rpath for torchaudio → torch dependency ────────────────────────────
-# libtorchaudio.so links to @rpath/libtorch.dylib. In the venv, torch sets up
-# the rpath at import time, but in a frozen bundle that doesn't happen.
-# Add the torch/lib directory as an rpath to every torchaudio native lib.
-# libtorchaudio.so is at torchaudio/lib/, libtorch.dylib is at torch/lib/
-# @loader_path is the dir containing the loading binary → torchaudio/lib/
-# So ../../torch/lib gets us to the right place regardless of install location.
-# torchaudio libs need two rpaths:
-#   1. @loader_path — for sibling libs (e.g. _torchaudio.so → libtorchaudio.so)
-#   2. @loader_path/../../torch/lib — for torch libs (libtorch.dylib, libc10.dylib)
-if [[ -d "$BUNDLE_LIB/torchaudio/lib" ]]; then
-    echo "Fixing @rpath for torchaudio…"
-    for f in "$BUNDLE_LIB/torchaudio/lib/"*.{so,dylib}; do
-        [[ -f "$f" ]] || continue
-        install_name_tool -add_rpath "@loader_path" "$f" 2>/dev/null || true
-        install_name_tool -add_rpath "@loader_path/../../torch/lib" "$f" 2>/dev/null || true
-    done
 fi
 
 # ── Re-sign with ad-hoc signature ─────────────────────────────────────────────

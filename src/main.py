@@ -182,7 +182,7 @@ def run_dictation_app(settings: Settings) -> None:
             f"Error: {exc}",
         )
         sys.exit(1)
-    print("Loading Silero VAD...")
+    print("Loading VAD...")
     vad.load()
     print("Ready. Starting menu bar app…\n")
 

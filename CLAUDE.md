@@ -109,10 +109,11 @@ runs on the Neural Engine / GPU. Do not use PyTorch as the inference backend.
 **Audio capture:** `sounddevice` (PortAudio bindings) — clean numpy integration,
 actively maintained, non-blocking callback stream. Chunks are 100ms / 1600 samples.
 
-**Voice Activity Detection:** `silero-vad` — neural VAD (LSTM), more accurate than
-webrtcvad across accents and noise. Requires exactly 512 samples per call at 16kHz.
-Split larger chunks into 512-sample windows internally before calling the model.
-Uses PyTorch for VAD inference only (not for the main transcription backend).
+**Voice Activity Detection:** MLX port of Silero VAD v5 — neural VAD (LSTM), more
+accurate than webrtcvad across accents and noise. Requires exactly 512 samples per
+call at 16kHz. Split larger chunks into 512-sample windows internally before calling
+the model. Weights are pre-extracted into `src/audio/silero_vad_v5.npz` (~1.2MB).
+Runs on MLX (same framework as the main transcription model — no PyTorch needed).
 
 **Text injection:** Quartz CGEvent via `pyobjc-framework-Quartz` — works system-wide
 at the window server layer. `AXIsProcessTrusted()` for permission check lives in
@@ -282,9 +283,9 @@ These are guardrails. Do not deviate from them without flagging it explicitly.
 
 These are non-obvious issues discovered during development. Check here before debugging.
 
-- **Silero VAD chunk size:** The model requires exactly 512 samples at 16kHz (32ms).
-  Passing any other size raises a TorchScript ValueError. Always split chunks into
-  512-sample windows before calling `vad.is_speech()`.
+- **VAD chunk size:** The MLX VAD model (ported from Silero VAD v5) requires exactly
+  512 samples at 16kHz (32ms) per window. Always split chunks into 512-sample windows
+  before calling `vad.is_speech()`. The weights are bundled at `src/audio/silero_vad_v5.npz`.
 
 - **AXIsProcessTrusted import:** This function is in `ApplicationServices`, not `Quartz`.
   `from Quartz import AXIsProcessTrusted` silently returns an ImportError.
@@ -315,11 +316,6 @@ These are non-obvious issues discovered during development. Check here before de
   but `.so` and `.dylib` files can't be `dlopen`'d from inside a zip. Any package
   with native extensions (e.g. `_sounddevice_data/portaudio-binaries/libportaudio.dylib`)
   must be listed in setup.py `packages` to force it out as a real directory.
-
-- **torchaudio @rpath in bundle:** `libtorchaudio.so` links to `@rpath/libtorch.dylib`.
-  In a venv, torch sets up the rpath at import time, but in a frozen py2app bundle
-  that doesn't happen. `build_app.sh` adds `@loader_path` (for sibling libs) and
-  `@loader_path/../../torch/lib` (for torch libs) via `install_name_tool`.
 
 - **Python.framework symlink structure:** py2app copies `Python.framework` with real
   files instead of the required symlink layout (`Versions/Current → 3.12`, etc.).
