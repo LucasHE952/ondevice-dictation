@@ -25,6 +25,13 @@ from config.defaults import MODEL_LOCAL_DIR, MODEL_REPO_ID, SAMPLE_RATE
 
 logger = logging.getLogger(__name__)
 
+# Voxtral Realtime's mlx-audio generate() silently returns empty text for
+# audio longer than ~15s when called in batch mode (stream=False). Segment
+# any recording longer than this and concatenate the results.
+# 10s gives a comfortable 5s margin below the observed ~15s failure threshold.
+_MAX_SEGMENT_SECONDS: float = 10.0
+_MAX_SEGMENT_SAMPLES: int = int(_MAX_SEGMENT_SECONDS * SAMPLE_RATE)
+
 
 class VoxtralModel:
     """Wraps Voxtral-Mini-4B-Realtime via mlx-audio for MLX-native transcription.
@@ -108,11 +115,28 @@ class VoxtralModel:
         """
         self._assert_loaded()
 
-        logger.debug(
-            "Transcribing %.1fs of audio", len(audio) / SAMPLE_RATE
-        )
+        duration = len(audio) / SAMPLE_RATE
+        logger.debug("Transcribing %.1fs of audio", duration)
         t0 = time.perf_counter()
 
+        if len(audio) > _MAX_SEGMENT_SAMPLES:
+            text = self._transcribe_segmented(audio, language)
+        else:
+            text = self._transcribe_chunk(audio)
+
+        elapsed = time.perf_counter() - t0
+        logger.debug("Done in %.2fs: %r", elapsed, text[:80])
+        return text
+
+    def _transcribe_chunk(self, audio: np.ndarray) -> str:
+        """Transcribe a single audio segment (must be ≤ _MAX_SEGMENT_SECONDS).
+
+        Args:
+            audio: 1-D float32 numpy array at 16kHz.
+
+        Returns:
+            Stripped transcription text, or empty string.
+        """
         # generate() with stream=False returns an STTOutput dataclass.
         # temperature=0.0 → greedy decoding (deterministic, best for dictation).
         result = self._model.generate(
@@ -121,11 +145,43 @@ class VoxtralModel:
             stream=False,
             transcription_delay_ms=self.transcription_delay_ms,
         )
-        text: str = result.text.strip()
+        return result.text.strip()
 
-        elapsed = time.perf_counter() - t0
-        logger.debug("Done in %.2fs: %r", elapsed, text[:80])
-        return text
+    def _transcribe_segmented(
+        self, audio: np.ndarray, language: Optional[str] = None
+    ) -> str:
+        """Transcribe long audio by splitting into segments and joining results.
+
+        Voxtral Realtime's mlx-audio generate() silently returns empty text for
+        audio longer than ~15s in batch mode. We split at fixed sample boundaries
+        and join segment transcriptions with a space.
+
+        Args:
+            audio: 1-D float32 numpy array at 16kHz, longer than _MAX_SEGMENT_SECONDS.
+            language: Unused — kept for signature consistency.
+
+        Returns:
+            Concatenated transcription text across all segments.
+        """
+        segments = [
+            audio[i : i + _MAX_SEGMENT_SAMPLES]
+            for i in range(0, len(audio), _MAX_SEGMENT_SAMPLES)
+        ]
+        logger.debug(
+            "Audio %.1fs → %d segments of ≤%.0fs each",
+            len(audio) / SAMPLE_RATE,
+            len(segments),
+            _MAX_SEGMENT_SECONDS,
+        )
+
+        parts: list[str] = []
+        for idx, segment in enumerate(segments):
+            text = self._transcribe_chunk(segment)
+            logger.debug("Segment %d/%d: %r", idx + 1, len(segments), text[:60])
+            if text:
+                parts.append(text)
+
+        return " ".join(parts)
 
     def transcribe_stream(
         self,
